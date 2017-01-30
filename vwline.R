@@ -124,8 +124,9 @@ vwControlPoints <- function(grob) {
          lowerx=lowerx, lowery=lowery,
          midx=midx, midy=midy)
 }
-                            
-vwXSpline <- function(grob) {
+
+## A single XSpline for makeContent() method (and for xDetails() method)
+vwSingleXSpline <- function(grob) {
     N <- length(grob$x)
     cp <- vwControlPoints(grob)
     ## Debugging
@@ -154,46 +155,84 @@ vwXSpline <- function(grob) {
 }
 
 makeContent.vwlineGrob <- function(x, ...) {
-    addGrob(x, vwXSpline(x))            
+    addGrob(x, vwSingleXSpline(x))            
 }
 
 xDetails.vwlineGrob <- function(x, theta) {
-    xDetails(vwXSpline(x), theta)
+    xDetails(vwSingleXSpline(x), theta)
 }
 
 yDetails.vwlineGrob <- function(x, theta) {
-    yDetails(vwXSpline(x), theta)
+    yDetails(vwSingleXSpline(x), theta)
 }
 
-vwPoints <- function(x) {
-    xsplinePoints(vwXSpline(x))
+## Calculate sets of points along upper, lower, and mid of vwline
+vwPoints <- function(grob) {
+    N <- length(grob$x)
+    cp <- vwControlPoints(grob)
+    ## Allow for endShape to be length 2
+    startShape <- grob$endShape[1]
+    if (length(grob$endShape) > 1) {
+        endShape <- grob$endShape[2]
+    } else {
+        endShape <- grob$endShape
+    }
+    upperShape <- c(rep(startShape, 3), rep(grob$shape, N - 2),
+                    rep(endShape, 3))
+    upperXSpline <- xsplineGrob(c(cp$lowerx[1], cp$midx[1], cp$upperx,
+                                  cp$midx[N], cp$lowerx[N]),
+                                c(cp$lowery[1], cp$midy[1], cp$uppery,
+                                  cp$midy[N], cp$lowery[N]),
+                                default.units="in",
+                                shape=upperShape, repEnds=FALSE)
+    lowerShape <- c(rep(startShape, 3), rep(grob$shape, N - 2),
+                    rep(endShape, 3))
+    lowerXSpline <- xsplineGrob(c(cp$upperx[1], cp$midx[1], cp$lowerx,
+                                  cp$midx[N], cp$upperx[N]),
+                                c(cp$uppery[1], cp$midy[1], cp$lowery,
+                                  cp$midy[N], cp$uppery[N]),
+                                default.units="in",
+                                shape=lowerShape, repEnds=FALSE)
+    midShape <- c(startShape, rep(grob$shape, N - 2), endShape)
+    midXSpline <- xsplineGrob(cp$midx, cp$midy, 
+                              default.units="in",
+                              shape=midShape, repEnds=FALSE)
+    list(upper=xsplinePoints(upperXSpline),
+         lower=xsplinePoints(lowerXSpline),
+         mid=xsplinePoints(midXSpline))
 }
 
-## Generate 'n' equally(-ish)-spaced points along boundary of vwline
-vwEdgePoints <- function(x, n, offset=0, debug=FALSE) {
+## Generate points specified propn along upper/lower/mid of vwline at specified
+vwEdgePoints <- function(x, p, which=c("upper", "lower", "mid"), debug=FALSE) {
     pts <- vwPoints(x)
-    ## pts is a unit in "in"
+    result <- list(uppper=NULL, lower=NULL, mid=NULL)
+    if ("upper" %in% which) {
+        result$upper=boundaryPoints(pts$upper, p, debug)
+    }
+    if ("lower" %in% which) {
+        result$lower=boundaryPoints(pts$lower, p, debug)
+    }
+    if ("mid" %in% which) {
+        result$mid=boundaryPoints(pts$mid, p, debug)
+    }
+    result
+}
+
+boundaryPoints <- function(pts, p, debug) {
+    ## each boundary is a unit in "in"
     x <- as.numeric(pts$x)
     y <- as.numeric(pts$y)
     ## Calculate total length of boundary
-    lengths <- sqrt((c(x[-1], x[1]) - x)^2 + (c(y[-1], y[1]) - y)^2)
+    lengths <- sqrt(diff(x)^2 + diff(y)^2)
     cumLength <- cumsum(lengths)
     length <- sum(lengths)
-    ## Adjust for offset by reordering x/y
-    start <- min(which(cumLength > offset*length))
-    if (start > 1) {
-        x <- x[c(start:length(x), 1:(start-1))]
-        y <- y[c(start:length(x), 1:(start-1))]
-        ## Recalculate
-        lengths <- sqrt((c(x[-1], x[1]) - x)^2 + (c(y[-1], y[1]) - y)^2)
-        cumLength <- cumsum(lengths)
-    }
-    ## Determine point selection
-    step <- length / n
-    breaks <- seq(0, length, step)[-(n + 1)]
-    index <- apply(outer(breaks, cumLength, "<"), 1,
+    ## Determine point selection (clamp to [0,length])
+    breaks <- p*length
+    ifelse(breaks < 0, 0, ifelse(breaks > length, length, breaks))
+    index <- apply(outer(breaks, cumLength, "<="), 1,
                    function(x) min(which(x)))
     ## Add tangent info
+    n <- length(breaks)
     tangent <- numeric(n)
     for (i in 1:n) {
         below <- index[i] - 1
@@ -331,7 +370,7 @@ test4 <- function() {
 }
 
 ## Get boundary points via vwPoints() with labels and perps
-test5 <- function(n=11, offset=0) {
+test5 <- function(p=seq(.1, .9, length=5)) {
     grid.newpage()
     pushViewport(viewport(width=.9, height=.9))
     path <- xsplinePoints(xsplineGrob(c(0, .5, 1), c(.4, .6, .4), shape=1))
@@ -345,6 +384,7 @@ test5 <- function(n=11, offset=0) {
     }
     vw <- vwlineGrob(path$x, path$y, width)
     grid.draw(vw)
-    pts <- vwEdgePoints(vw, n, offset=offset, debug=TRUE)
+    pts <- vwEdgePoints(vw, p, debug=TRUE)
     popViewport()
 }
+
