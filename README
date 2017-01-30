@@ -1,0 +1,15 @@
+
++ The basic idea is to try to provide an interface for drawing
+  more artistic curves that vary in their width
+
+  - Adobe Illustrator has pressure-sensitive stylus support
+    for free-hand drawing
+
+  - Inkscape does not have support ?
+
+  - there are some proposals for SVG/CSS support
+
+    https://www.w3.org/Graphics/SVG/WG/wiki/Proposals/Variable_width_stroke
+
+  - no support in processing(.js) ?
+

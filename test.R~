@@ -1,0 +1,6 @@
+library(grid)
+grid.newpage()
+grid.path(c(.1, .2, .3, .4, .5, .4, .25, .3, .35, .2),
+          c(.1, .5, .6, .5, .1, .1, .4, .35, .4, .1),
+          gp=gpar(fill=rgb(0,0,0,.5)), rule="evenodd")
+
