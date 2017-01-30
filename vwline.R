@@ -9,6 +9,15 @@ angle <- function(x, y) {
     atan2(y[2] - y[1], x[2] - x[1])
 }
 
+## extend direction from pt 2 to pt 1
+extend <- function(x, y, len) {
+    a <- angle(x[2:1], y[2:1])
+    dx <- len*cos(a)
+    dy <- len*sin(a)
+    c(x[1] + dx, y[1] + dy)
+}
+
+## x and y are vectors; ends defines subset of length 2
 perp <- function(x, y, len, ends, mid) {
     a <- angle(x[ends], y[ends])
     dx <- len*cos(a + pi/2)
@@ -39,56 +48,92 @@ grid.vwline <- function(...) {
     grid.draw(vwlineGrob(...))
 }
 
-vwlineGrob <- function(x, y, w, shape=0, endShape=shape, ...,
+vwlineGrob <- function(x, y, w, shape=0,
+                       endWidth=unit(0, "mm"), endShape=shape, ...,
                        gp=NULL, debug=FALSE) {
-    if (max(length(x), length(y), length(w)) < 3)
-        stop("A vwline must have at least three control points")
-    gTree(x=x, y=y, w=w, shape=shape, endShape=endShape, debug=debug,
-          cl="vwlineGrob", gp=gp)
+    checkvwline(x, y, w)
+    gTree(x=x, y=y, w=w, shape=shape, endWidth=endWidth, endShape=endShape,
+          debug=debug, gp=gp, cl="vwlineGrob")
 }
 
-vwXSpline <- function(grob) {
-    nx <- length(grob$x)
-    ny <- length(grob$y)
-    nw <- length(grob$w)
+checkvwline <- function(x, y, w) {
+    if (max(length(x), length(y), length(w)) < 3)
+        stop("A vwline must have at least three control points")
+    nx <- length(x)
+    ny <- length(y)
+    nw <- length(w)
     if (nx != ny || nx != nw) {
         stop("x, y, and w must all have same length (for now)")
     }
-    N <- nx
+}
+
+## Generate a set of control points from which we can produce
+## one or more XSplines for the outline of the vwline
+## NOTE that we want to be able to produce separate upper and lower (and mid)
+## XSplines (for edge points) as well as a single overall boundary XSpline
+## (for drawing)
+vwControlPoints <- function(grob) {
+    N <- length(grob$x)
     x <- convertX(grob$x, "in", valueOnly=TRUE)
     y <- convertY(grob$y, "in", valueOnly=TRUE)
     w <- pmin(convertWidth(grob$w, "in", valueOnly=TRUE),
               convertHeight(grob$w, "in", valueOnly=TRUE))
+    ew <- pmin(convertWidth(grob$endWidth, "in", valueOnly=TRUE),
+               convertHeight(grob$endWidth, "in", valueOnly=TRUE))
+    startw <- ew[1]
+    if (length(grob$endWidth) > 1) {
+        endw <- ew[2]
+    } else {
+        endw <- startw
+    }
     upperx <- numeric(N)
-    lowerx <- numeric(N)
     uppery <- numeric(N)
+    lowerx <- numeric(N)
     lowery <- numeric(N)
-    ends <- perpStart(x[1:2], y[1:2], w[1])
-    upperx[1] <- ends[1, 1]
-    uppery[1] <- ends[1, 2]
-    lowerx[1] <- ends[2, 1]
-    lowery[1] <- ends[2, 2]
+    midx <- numeric(N)
+    midy <- numeric(N)
+    perps <- perpStart(x[1:2], y[1:2], w[1])
+    upperx[1] <- perps[1, 1]
+    uppery[1] <- perps[1, 2]
+    lowerx[1] <- perps[2, 1]
+    lowery[1] <- perps[2, 2]
+    ends <- extend(x[1:2], y[1:2], startw)
+    midx[1] <- ends[1]
+    midy[1] <- ends[2]
     for (i in 2:(N - 1)) {
         seq <- (i - 1):(i + 1)
-        ends <- perp3(as.numeric(x[seq]), as.numeric(y[seq]), w[i])
+        perps <- perp3(as.numeric(x[seq]), as.numeric(y[seq]), w[i])
         ## FIXME: need to remove ends where perpendicular intersects
         ##        with previous perpendicular (upper or lower)
-        upperx[i] <- ends[1, 1]
-        uppery[i] <- ends[1, 2]
-        lowerx[i] <- ends[2, 1]
-        lowery[i] <- ends[2, 2]
+        upperx[i] <- perps[1, 1]
+        uppery[i] <- perps[1, 2]
+        lowerx[i] <- perps[2, 1]
+        lowery[i] <- perps[2, 2]
+        midx[i] <- x[i]
+        midy[i] <- y[i]
     }
-    ends <- perpEnd(x[(N-1):N], y[(N-1):N], w[N])
-    upperx[N] <- ends[1, 1]
-    uppery[N] <- ends[1, 2]
-    lowerx[N] <- ends[2, 1]
-    lowery[N] <- ends[2, 2]
+    perps <- perpEnd(x[(N-1):N], y[(N-1):N], w[N])
+    upperx[N] <- perps[1, 1]
+    uppery[N] <- perps[1, 2]
+    lowerx[N] <- perps[2, 1]
+    lowery[N] <- perps[2, 2]
+    ends <- extend(x[N:(N-1)], y[N:(N-1)], endw)
+    midx[N] <- ends[1]
+    midy[N] <- ends[2]
+    list(upperx=upperx, uppery=uppery,
+         lowerx=lowerx, lowery=lowery,
+         midx=midx, midy=midy)
+}
+                            
+vwXSpline <- function(grob) {
+    N <- length(grob$x)
+    cp <- vwControlPoints(grob)
     ## Debugging
     if (grob$debug) {
-        grid.points(x, y, pch=16, size=unit(2, "mm"),
+        grid.points(cp$midx, cp$midy, pch=16, size=unit(2, "mm"),
                     default.units="in",
                     gp=gpar(col="red"))
-        grid.segments(upperx, uppery, lowerx, lowery,
+        grid.segments(cp$upperx, cp$uppery, cp$lowerx, cp$lowery,
                       default.units="in",
                       gp=gpar(col="red"))
     }
@@ -99,11 +144,11 @@ vwXSpline <- function(grob) {
     } else {
         endShape <- grob$endShape
     }
-    vwShape <- c(startShape, rep(grob$shape, N - 2),
-                 rep(endShape, 2),
-                 rep(grob$shape, N - 2), startShape)
-    xsplineGrob(c(upperx, rev(lowerx)),
-                c(uppery, rev(lowery)),
+    vwShape <- c(rep(startShape, 2), rep(grob$shape, N - 2),
+                 rep(endShape, 3),
+                 rep(grob$shape, N - 2), rep(startShape, 2))
+    xsplineGrob(c(cp$midx[1], cp$upperx, cp$midx[N], rev(cp$lowerx)),
+                c(cp$midy[1], cp$uppery, cp$midy[N], rev(cp$lowery)),
                 default.units="in",
                 open=FALSE, shape=vwShape)
 }
@@ -174,6 +219,7 @@ vwEdgePoints <- function(x, n, offset=0, debug=FALSE) {
 ################################################################################
 ## Testing
 
+## Simple curve with variable width
 test <- function() {
     grid.newpage()
     pushViewport(viewport(width=.9, height=.9))
@@ -190,14 +236,17 @@ test <- function() {
     popViewport()
 }
 
+## Variations on shape and endshape
 test2 <- function() {
-    testShape <- function(row, col, shape, endShape, width, border=FALSE) {
+    testShape <- function(row, col, shape, endShape, width,
+                          endWidth=0, border=FALSE) {
         pushViewport(viewport(layout.pos.col=col, layout.pos.row=row))
         if (border) grid.rect()
         grid.vwline(unit(c(.2, .5, .8, .8), "npc"),
                     unit(c(.8, .8, .5, .2), "npc"),
                     unit(width/2, "cm"),
                     shape=shape, endShape=endShape,
+                    endWidth=unit(endWidth/2, "cm"),
                     gp=gpar(fill=rgb(0,0,0,.5)),
                     debug=TRUE)
         popViewport()
@@ -233,10 +282,12 @@ test2 <- function() {
     testShape(3, 2, -1, 1, rep(1, 4))
     testShape(3, 3, -1, -1, rep(1, 4))
     testShape(4, 1, 1, c(0, 0), c(1, 2/3, 1/3, 0), border=TRUE)
-    testShape(4, 2, 1, c(1, 0), c(1, 2/3, 1/3, 0), border=TRUE)
-    testShape(4, 3, 1, 1, c(1, 3/4, 2/4, 1/4), border=TRUE)
+    testShape(4, 2, 1, c(1, 0), c(1, 2/3, 1/3, 0), endWidth=c(1, 0),
+              border=TRUE)
+    testShape(4, 3, 1, 1, c(1, 3/4, 2/4, 1/4), endWidth=1, border=TRUE)
 }
 
+## Get boundary points via grobX()
 test3 <- function() {
     grid.newpage()
     pushViewport(viewport(width=.9, height=.9))
@@ -258,6 +309,7 @@ test3 <- function() {
     popViewport()
 }
 
+## Get boundary points via vwPoints()
 test4 <- function() {
     grid.newpage()
     pushViewport(viewport(width=.9, height=.9))
@@ -278,6 +330,7 @@ test4 <- function() {
     popViewport()
 }
 
+## Get boundary points via vwPoints() with labels and perps
 test5 <- function(n=11, offset=0) {
     grid.newpage()
     pushViewport(viewport(width=.9, height=.9))
