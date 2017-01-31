@@ -33,9 +33,10 @@ eyelid <- function(x, y, w, angle, flip=FALSE) {
                       w=unit(c(0, 1, 2, 1, 0), "mm"), shape=1, endShape=0,
                       gp=gpar(fill="black"))
     grid.draw(lid)
-    pts <- vwEdgePoints(lid, 11)
-    for (i in 8:11) {
-        eyelash(pts$x[i], pts$y[i], 180*pts$tangent[i]/pi + 180, flip=flip)
+    pts <- vwEdgePoints(lid, seq(.2, .8, .2), "lower")
+    for (i in 1:4) {
+        eyelash(pts$lower$x[i], pts$lower$y[i],
+                180*pts$lower$tangent[i]/pi, flip=flip)
     }
     ## grid.rect()
     popViewport()    
