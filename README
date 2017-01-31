@@ -5,6 +5,16 @@
   - Adobe Illustrator has pressure-sensitive stylus support
     for free-hand drawing
 
+    + here's a nice video of the "width" tool that allows 
+      editing of variable width at different points on a stroke
+
+      https://helpx.adobe.com/illustrator/atv/cs5-tutorials/using-variablewidth-strokes.html
+
+      - NOTE that this allows different widths "above" and "below" the line
+
+    + there is a scripting API for AI, but may not provide access to
+      all tools, e.g., cannot find example of script control of width tool
+
   - Inkscape does not have support ?
 
   - there are some proposals for SVG/CSS support
