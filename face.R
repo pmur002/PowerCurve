@@ -44,9 +44,13 @@ eyelid <- function(x, y, w, angle, flip=FALSE) {
 
 nose <- function(x, y) {
     pushViewport(viewport(x, y, just=c("left", "bottom")))
-    grid.xspline(unit(c(-10, 10, 3, -3), "mm"),
-                 unit(c(8, 8, -8, -8), "mm"),
-                 open=FALSE, shape=1, gp=gpar(lwd=4))
+    grid.vwline(unit(c(-15, 15, 3, -3), "mm"),
+                unit(c(10, 10, -10, -10), "mm"),
+                unit(c(2, 2, 1, 1), "mm"),
+                open=FALSE, shape=1,
+                gp=gpar(fill="black"),
+                name="nose")
+    ## vwEdgePoints(grid.get("nose"), 0:3/3, debug=TRUE)
     popViewport()
 }
 

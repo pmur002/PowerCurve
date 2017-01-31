@@ -48,12 +48,13 @@ grid.vwline <- function(...) {
     grid.draw(vwlineGrob(...))
 }
 
-vwlineGrob <- function(x, y, w, shape=0,
-                       endWidth=unit(0, "mm"), endShape=shape, ...,
-                       gp=NULL, debug=FALSE) {
+## IF open=FALSE, endShape and endWidth are IGNORED
+vwlineGrob <- function(x, y, w, shape=0, open=TRUE,
+                       endShape=shape, endWidth=unit(0, "mm"),
+                       gp=NULL, name=NULL, debug=FALSE) {
     checkvwline(x, y, w)
     gTree(x=x, y=y, w=w, shape=shape, endWidth=endWidth, endShape=endShape,
-          debug=debug, gp=gp, cl="vwlineGrob")
+          open=open, debug=debug, gp=gp, name=name, cl="vwlineGrob")
 }
 
 checkvwline <- function(x, y, w) {
@@ -92,19 +93,30 @@ vwControlPoints <- function(grob) {
     lowery <- numeric(N)
     midx <- numeric(N)
     midy <- numeric(N)
-    perps <- perpStart(x[1:2], y[1:2], w[1])
-    upperx[1] <- perps[1, 1]
-    uppery[1] <- perps[1, 2]
-    lowerx[1] <- perps[2, 1]
-    lowery[1] <- perps[2, 2]
-    ends <- extend(x[1:2], y[1:2], startw)
-    midx[1] <- ends[1]
-    midy[1] <- ends[2]
+    ## First control point
+    if (grob$open) {
+        perps <- perpStart(x[1:2], y[1:2], w[1])
+        upperx[1] <- perps[1, 1]
+        uppery[1] <- perps[1, 2]
+        lowerx[1] <- perps[2, 1]
+        lowery[1] <- perps[2, 2]
+        ends <- extend(x[1:2], y[1:2], startw)
+        midx[1] <- ends[1]
+        midy[1] <- ends[2]
+    } else {
+        seq <- c(N, 1:2)
+        perps <- perp3(as.numeric(x[seq]), as.numeric(y[seq]), w[1])
+        upperx[1] <- perps[1, 1]
+        uppery[1] <- perps[1, 2]
+        lowerx[1] <- perps[2, 1]
+        lowery[1] <- perps[2, 2]
+        midx[1] <- x[1]
+        midy[1] <- y[1]
+    }
+    ## All but first and last control points
     for (i in 2:(N - 1)) {
         seq <- (i - 1):(i + 1)
         perps <- perp3(as.numeric(x[seq]), as.numeric(y[seq]), w[i])
-        ## FIXME: need to remove ends where perpendicular intersects
-        ##        with previous perpendicular (upper or lower)
         upperx[i] <- perps[1, 1]
         uppery[i] <- perps[1, 2]
         lowerx[i] <- perps[2, 1]
@@ -112,21 +124,33 @@ vwControlPoints <- function(grob) {
         midx[i] <- x[i]
         midy[i] <- y[i]
     }
-    perps <- perpEnd(x[(N-1):N], y[(N-1):N], w[N])
-    upperx[N] <- perps[1, 1]
-    uppery[N] <- perps[1, 2]
-    lowerx[N] <- perps[2, 1]
-    lowery[N] <- perps[2, 2]
-    ends <- extend(x[N:(N-1)], y[N:(N-1)], endw)
-    midx[N] <- ends[1]
-    midy[N] <- ends[2]
+    ## Last control point
+    if (grob$open) {
+        perps <- perpEnd(x[(N-1):N], y[(N-1):N], w[N])
+        upperx[N] <- perps[1, 1]
+        uppery[N] <- perps[1, 2]
+        lowerx[N] <- perps[2, 1]
+        lowery[N] <- perps[2, 2]
+        ends <- extend(x[N:(N-1)], y[N:(N-1)], endw)
+        midx[N] <- ends[1]
+        midy[N] <- ends[2]
+    } else {
+        seq <- c(N - 1, N, 1)
+        perps <- perp3(as.numeric(x[seq]), as.numeric(y[seq]), w[N])
+        upperx[N] <- perps[1, 1]
+        uppery[N] <- perps[1, 2]
+        lowerx[N] <- perps[2, 1]
+        lowery[N] <- perps[2, 2]
+        midx[N] <- x[N]
+        midy[N] <- y[N]
+    }
     list(upperx=upperx, uppery=uppery,
          lowerx=lowerx, lowery=lowery,
          midx=midx, midy=midy)
 }
 
-## A single XSpline for makeContent() method (and for xDetails() method)
-vwSingleXSpline <- function(grob) {
+## A single path for makeContent() method (and for xDetails() method)
+vwPath <- function(grob) {
     N <- length(grob$x)
     cp <- vwControlPoints(grob)
     ## Debugging
@@ -138,24 +162,41 @@ vwSingleXSpline <- function(grob) {
                       default.units="in",
                       gp=gpar(col="red"))
     }
-    ## Allow for endShape to be length 2
-    startShape <- grob$endShape[1]
-    if (length(grob$endShape) > 1) {
-        endShape <- grob$endShape[2]
+    if (grob$open) {
+        ## Allow for endShape to be length 2
+        startShape <- grob$endShape[1]
+        if (length(grob$endShape) > 1) {
+            endShape <- grob$endShape[2]
+        } else {
+            endShape <- grob$endShape
+        }
+        vwShape <- c(rep(startShape, 2), rep(grob$shape, N - 2),
+                     rep(endShape, 3),
+                     rep(grob$shape, N - 2), rep(startShape, 2))
+        xs <- xsplineGrob(c(cp$midx[1], cp$upperx, cp$midx[N], rev(cp$lowerx)),
+                          c(cp$midy[1], cp$uppery, cp$midy[N], rev(cp$lowery)),
+                          default.units="in",
+                          open=FALSE, shape=vwShape)
+        pts <- xsplinePoints(xs)
+        pathGrob(pts$x, pts$y, id.lengths=length(pts$x),
+                 rule="winding")
     } else {
-        endShape <- grob$endShape
+        outerPts <- xsplinePoints(xsplineGrob(cp$upperx, cp$uppery,
+                                              default.units="in",
+                                              open=FALSE, shape=grob$shape))
+        innerPts <- xsplinePoints(xsplineGrob(rev(cp$lowerx), rev(cp$lowery),
+                                              default.units="in",
+                                              open=FALSE, shape=grob$shape))
+        pathGrob(c(outerPts$x, innerPts$x),
+                 c(outerPts$y, innerPts$y),
+                 id.lengths=c(length(outerPts$x), length(innerPts$x)),
+                 default.units="in",
+                 rule="winding")        
     }
-    vwShape <- c(rep(startShape, 2), rep(grob$shape, N - 2),
-                 rep(endShape, 3),
-                 rep(grob$shape, N - 2), rep(startShape, 2))
-    xsplineGrob(c(cp$midx[1], cp$upperx, cp$midx[N], rev(cp$lowerx)),
-                c(cp$midy[1], cp$uppery, cp$midy[N], rev(cp$lowery)),
-                default.units="in",
-                open=FALSE, shape=vwShape)
 }
 
 makeContent.vwlineGrob <- function(x, ...) {
-    addGrob(x, vwSingleXSpline(x))            
+    addGrob(x, vwPath(x))            
 }
 
 xDetails.vwlineGrob <- function(x, theta) {
@@ -170,33 +211,45 @@ yDetails.vwlineGrob <- function(x, theta) {
 vwPoints <- function(grob) {
     N <- length(grob$x)
     cp <- vwControlPoints(grob)
-    ## Allow for endShape to be length 2
-    startShape <- grob$endShape[1]
-    if (length(grob$endShape) > 1) {
-        endShape <- grob$endShape[2]
+    if (grob$open) {
+        ## Allow for endShape to be length 2
+        startShape <- grob$endShape[1]
+        if (length(grob$endShape) > 1) {
+            endShape <- grob$endShape[2]
+        } else {
+            endShape <- grob$endShape
+        }
+        upperShape <- c(rep(startShape, 3), rep(grob$shape, N - 2),
+                        rep(endShape, 3))
+        upperXSpline <- xsplineGrob(c(cp$lowerx[1], cp$midx[1], cp$upperx,
+                                      cp$midx[N], cp$lowerx[N]),
+                                    c(cp$lowery[1], cp$midy[1], cp$uppery,
+                                      cp$midy[N], cp$lowery[N]),
+                                    default.units="in",
+                                    shape=upperShape, repEnds=FALSE)
+        lowerShape <- c(rep(startShape, 3), rep(grob$shape, N - 2),
+                        rep(endShape, 3))
+        lowerXSpline <- xsplineGrob(c(cp$upperx[1], cp$midx[1], cp$lowerx,
+                                      cp$midx[N], cp$upperx[N]),
+                                    c(cp$uppery[1], cp$midy[1], cp$lowery,
+                                      cp$midy[N], cp$uppery[N]),
+                                    default.units="in",
+                                    shape=lowerShape, repEnds=FALSE)
+        midShape <- c(startShape, rep(grob$shape, N - 2), endShape)
+        midXSpline <- xsplineGrob(cp$midx, cp$midy, 
+                                  default.units="in",
+                                  shape=midShape, repEnds=FALSE)
     } else {
-        endShape <- grob$endShape
+        upperXSpline <- xsplineGrob(cp$upperx, cp$uppery,
+                                    default.units="in",
+                                    shape=grob$shape, open=FALSE)
+        lowerXSpline <- xsplineGrob(cp$lowerx, cp$lowery,
+                                    default.units="in",
+                                    shape=grob$shape, open=FALSE)
+        midXSpline <- xsplineGrob(cp$midx, cp$midy,
+                                    default.units="in",
+                                    shape=grob$shape, open=FALSE)
     }
-    upperShape <- c(rep(startShape, 3), rep(grob$shape, N - 2),
-                    rep(endShape, 3))
-    upperXSpline <- xsplineGrob(c(cp$lowerx[1], cp$midx[1], cp$upperx,
-                                  cp$midx[N], cp$lowerx[N]),
-                                c(cp$lowery[1], cp$midy[1], cp$uppery,
-                                  cp$midy[N], cp$lowery[N]),
-                                default.units="in",
-                                shape=upperShape, repEnds=FALSE)
-    lowerShape <- c(rep(startShape, 3), rep(grob$shape, N - 2),
-                    rep(endShape, 3))
-    lowerXSpline <- xsplineGrob(c(cp$upperx[1], cp$midx[1], cp$lowerx,
-                                  cp$midx[N], cp$upperx[N]),
-                                c(cp$uppery[1], cp$midy[1], cp$lowery,
-                                  cp$midy[N], cp$uppery[N]),
-                                default.units="in",
-                                shape=lowerShape, repEnds=FALSE)
-    midShape <- c(startShape, rep(grob$shape, N - 2), endShape)
-    midXSpline <- xsplineGrob(cp$midx, cp$midy, 
-                              default.units="in",
-                              shape=midShape, repEnds=FALSE)
     list(upper=xsplinePoints(upperXSpline),
          lower=xsplinePoints(lowerXSpline),
          mid=xsplinePoints(midXSpline))
