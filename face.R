@@ -90,3 +90,18 @@ whiskers(.35, .5)
 whiskers(.65, .5)
 dev.off()
 
+library(gridSVG)
+gridsvg("face.svg", width=20, height=10, bg="transparent")
+pushViewport(viewport(width=unit(7, "in"), height=unit(7, "in")))
+## grid.rect(gp=gpar(col=NA, fill="grey"))
+grid.rect(gp=gpar(col=NA, fill=NA), name="bg")
+grid.gradientFill("bg",
+                  radialGradient(rgb(1,1,1, c(1, 1, 0)), stops=c(0, .5, 1)),
+                  group=FALSE)
+eyelid(.65, .7, .2, -20)
+eyelid(.35, .7, .2, 20, flip=TRUE)
+nose(.5, .5)
+whiskers(.35, .5)
+whiskers(.65, .5)
+dev.off()
+system("convert -background none face.svg face-bg.png")
