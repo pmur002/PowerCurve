@@ -9,7 +9,7 @@ angle <- function(x, y) {
     atan2(y[2] - y[1], x[2] - x[1])
 }
 
-## extend direction from pt 2 to pt 1
+## extend direction from pt 1 to pt 2
 extend <- function(x, y, len) {
     a <- angle(x[2:1], y[2:1])
     dx <- len*cos(a)
@@ -200,11 +200,11 @@ makeContent.vwlineGrob <- function(x, ...) {
 }
 
 xDetails.vwlineGrob <- function(x, theta) {
-    xDetails(vwSingleXSpline(x), theta)
+    xDetails(vwPath(x), theta)
 }
 
 yDetails.vwlineGrob <- function(x, theta) {
-    yDetails(vwSingleXSpline(x), theta)
+    yDetails(vwPath(x), theta)
 }
 
 ## Calculate sets of points along upper, lower, and mid of vwline
@@ -260,23 +260,27 @@ vwEdgePoints <- function(x, p, which=c("upper", "lower", "mid"), debug=FALSE) {
     pts <- vwPoints(x)
     result <- list(uppper=NULL, lower=NULL, mid=NULL)
     if ("upper" %in% which) {
-        result$upper=boundaryPoints(pts$upper, p, debug)
+        result$upper=boundaryPoints(pts$upper, p, x$open, debug)
     }
     if ("lower" %in% which) {
-        result$lower=boundaryPoints(pts$lower, p, debug)
+        result$lower=boundaryPoints(pts$lower, p, x$open, debug)
     }
     if ("mid" %in% which) {
-        result$mid=boundaryPoints(pts$mid, p, debug)
+        result$mid=boundaryPoints(pts$mid, p, x$open, debug)
     }
     result
 }
 
-boundaryPoints <- function(pts, p, debug) {
+boundaryPoints <- function(pts, p, open, debug) {
     ## each boundary is a unit in "in"
     x <- as.numeric(pts$x)
     y <- as.numeric(pts$y)
+    if (!open) {
+        x <- c(x, x[1])
+        y <- c(y, y[1])
+    }
     ## Calculate total length of boundary
-    lengths <- sqrt(diff(x)^2 + diff(y)^2)
+    lengths <- c(0, sqrt(diff(x)^2 + diff(y)^2))
     cumLength <- cumsum(lengths)
     length <- sum(lengths)
     ## Determine point selection (clamp to [0,length])
@@ -287,15 +291,34 @@ boundaryPoints <- function(pts, p, debug) {
     ## Add tangent info
     n <- length(breaks)
     tangent <- numeric(n)
+    xx <- numeric(n)
+    yy <- numeric(n)
     for (i in 1:n) {
-        below <- index[i] - 1
-        if (below < 1) below <- length(x)
-        above <- index[i] + 1
-        if (above > length(x)) above <- 1
-        tangent[i] <- angle(x[c(above, below)], y[c(above, below)])
+        ## What is the distance to the next boundary point ?
+        prev <- index[i] - 1
+        if (prev < 1) {
+            dist <- breaks[i]
+            prev <- length(x)
+        } else {
+            dist <- breaks[i] - cumLength[prev]
+        }
+        if (dist == 0) {
+            ## Bang on a boundary point
+            xx[i] <- x[index[i]]
+            yy[i] <- y[index[i]]
+            below <- index[i] - 1
+            if (below < 1) below <- length(x)
+            above <- index[i] + 1
+            if (above > length(x)) above <- 1
+            tangent[i] <- angle(x[c(above, below)], y[c(above, below)])
+        } else {
+            tangent[i] <- angle(x[c(prev, index[i])], y[c(prev, index[i])])
+            xx[i] <- x[prev] + dist*cos(tangent[i])
+            yy[i] <- y[prev] + dist*sin(tangent[i])
+        }
     }
-    x <- unit(x[index], "in")
-    y <- unit(y[index], "in")
+    x <- unit(xx, "in")
+    y <- unit(yy, "in")
     if (debug) {
         grid.points(x, y, size=unit(2, "mm"), 
                     pch=16, gp=gpar(col="red"))
@@ -435,7 +458,7 @@ test5 <- function(p=seq(.1, .9, length=5)) {
         s <- seq(0, 5, length.out=N %/% 2)
         width <- unit(c(s, 5, rev(s)), "mm")
     }
-    vw <- vwlineGrob(path$x, path$y, width)
+    vw <- vwlineGrob(path$x, path$y, width, debug=TRUE)
     grid.draw(vw)
     pts <- vwEdgePoints(vw, p, debug=TRUE)
     popViewport()
