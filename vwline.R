@@ -37,7 +37,16 @@ perpEnd <- function(x, y, len) {
 }
 
 ## x and y are vectors of length 3
+## We want the "average" angle at the middle point
 perp3 <- function(x, y, len) {
+    ## First determine length of each segment
+    diffx <- diff(x)
+    diffy <- diff(y)
+    hypot <- sqrt(diffx^2 + diffy^2)
+    ## Shift first point so that first segment matches length of second segment
+    x[1] <- x[2] - diffx[1]*hypot[2]/hypot[1]
+    y[1] <- y[2] - diffy[1]*hypot[2]/hypot[1]
+    ## Now determine angle at midpoint
     perp(x, y, len, c(1, 3), 2)
 }
 
