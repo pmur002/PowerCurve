@@ -47,3 +47,36 @@ testspline2 <- function(shape) {
 testspline2(0)
 testspline2(1)
 testspline2(-1)
+
+## X-Spline vs Bezier
+
+x <- unit(c(.1, .3, .5, .9), "npc")
+y <- unit(c(.5, .8, .2, .5), "npc")
+
+grid.newpage()
+grid.points(x, y, pch=16, gp=gpar(col="grey"))
+grid.lines(x, y, gp=gpar(col="grey"))
+grid.bezier(x, y, gp=gpar(col="blue"))
+## Much "curvier" than Bezier
+grid.xspline(x, y, shape=1, gp=gpar(col="red"))
+## Using extended control points rather than repEnds=TRUE is "smoother"
+grid.xspline(unit.c(unit(-.1, "npc"), x, unit(1.3, "npc")),
+             unit.c(unit(.2, "npc"), y, unit(.8, "npc")),
+             repEnds=FALSE, shape=1, gp=gpar(col="green"))
+
+x <- unit(c(.1, .3, .5, .9), "npc")
+y <- unit(c(.5, .65, .35, .5), "npc")
+
+grid.newpage()
+grid.points(x, y, pch=16, gp=gpar(col="grey"))
+grid.lines(x, y, gp=gpar(col="grey"))
+grid.bezier(x, y, gp=gpar(col="blue"))
+## Much "curvier" than Bezier
+grid.xspline(x, y, shape=1, gp=gpar(col="red"))
+## Using extended control points rather than repEnds=TRUE is "smoother"
+grid.xspline(unit.c(unit(-.1, "npc"), x, unit(1.3, "npc")),
+             unit.c(unit(.35, "npc"), y, unit(.65, "npc")),
+             repEnds=FALSE, shape=1, gp=gpar(col="green"))
+
+
+
